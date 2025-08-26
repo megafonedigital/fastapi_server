@@ -1,0 +1,35 @@
+# FastAPI e dependências
+fastapi==0.104.1
+uvicorn==0.23.2
+pydantic==2.4.2
+pydantic-settings==2.0.3
+python-dotenv==1.0.0
+python-multipart==0.0.6
+starlette==0.27.0
+typing-extensions==4.8.0
+
+# Autenticação
+python-jose==3.3.0
+passlib==1.7.4
+
+# Logging
+python-json-logger==2.0.7
+
+# Armazenamento
+minio==7.1.17
+
+# Download de vídeos
+yt-dlp==2023.10.13
+requests==2.31.0
+
+# Processamento de áudio/vídeo
+ffmpeg-python==0.2.0
+faster-whisper==0.9.0
+numpy==1.26.1
+torch==2.1.0
+torchaudio==2.1.0
+
+# Testes
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.1

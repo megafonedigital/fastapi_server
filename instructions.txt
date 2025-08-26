@@ -1,0 +1,338 @@
+# 📌 Instruções para o Agente (Trae)
+
+Você é um **engenheiro principal de plataforma** encarregado de gerar um **servidor de API FastAPI** totalmente funcional para **download de vídeos** (YouTube, Instagram, Facebook e TikTok) e **transcrição de áudio/vídeo**, com **armazenamento no MinIO**. Entregue **código de produção** com testes, documentação e `Dockerfile`/`docker-compose`.
+
+> Regras de ouro:
+>
+> 1. Gere **arquivos completos** (sem trechos omitidos) prontos para rodar.
+> 2. Use **yt-dlp** para todos os downloads (cobre YT/IG/FB/TikTok).
+> 3. Salve **vídeos e transcrições** no **MinIO** (com URLs pré-assinadas).
+> 4. Forneça **rotas síncronas e assíncronas** (com fila leve via `BackgroundTasks` do FastAPI).
+> 5. Entregue **OpenAPI** completo, tipagem Pydantic, logging estruturado, tratamento de erros e testes.
+
+---
+
+## 🎯 Objetivos
+
+* Baixar vídeos/áudios das plataformas suportadas usando `yt-dlp`.
+* Persistir artefatos (vídeo/áudio/legendas e transcrições em JSON/SRT/VTT) no MinIO.
+* Disponibilizar rotas REST para **download**, **status**, **listagem**, **transcrição** e **obtenção de URLs pré-assinadas**.
+* Executar **transcrição** local via **faster-whisper** (FFmpeg obrigatório).
+* Containerizar a aplicação (Docker) e facilitar o run com `docker-compose`.
+
+---
+
+## 🧱 Stack Técnica
+
+* **Linguagem:** Python 3.11+
+* **Web:** FastAPI + Uvicorn
+* **Downloads:** yt-dlp (suporte YT/IG/FB/TikTok)
+* **Storage:** MinIO (SDK oficial `minio`)
+* **Transcrição:** `faster-whisper` (modelos configuráveis), `ffmpeg`
+* **Schemas/Validação:** Pydantic v2
+* **Auth:** API Key em header `X-API-Key`
+* **Utilitários:** `tenacity` (retries), `python-multipart`, `aiofiles`, `httpx`
+* **Testes:** pytest + httpx AsyncClient
+* **Observabilidade:** logging JSON + middleware de correlação (X-Request-Id)
+
+---
+
+## 🔐 Variáveis de Ambiente (.env exemplo)
+
+```
+API_TITLE=Media Downloader API
+API_VERSION=1.0.0
+API_DEBUG=false
+API_KEY=supersecreta
+
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=media
+MINIO_SECURE=false
+
+# pasta temporária dentro do container
+WORKDIR=/app/data
+
+# Transcrição
+WHISPER_MODEL=medium
+WHISPER_COMPUTE_TYPE=auto  # auto / float16 / int8
+WHISPER_LANGUAGE=pt
+```
+
+---
+
+## 📁 Estrutura de Pastas esperada
+
+```
+.
+├── app/
+│   ├── main.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── routes_downloads.py
+│   │   ├── routes_transcriptions.py
+│   │   └── routes_health.py
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── security.py
+│   │   ├── logging.py
+│   │   └── storage.py
+│   ├── services/
+│   │   ├── downloader.py
+│   │   ├── transcription.py
+│   │   └── utils.py
+│   └── models/
+│       ├── dto.py
+│       └── types.py
+├── tests/
+│   ├── test_health.py
+│   ├── test_download_flow.py
+│   └── test_transcription_flow.py
+├── pyproject.toml (ou requirements.txt)
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## 🧾 Dependências
+
+Se usar `pyproject.toml`:
+
+```toml
+[project]
+name = "media-downloader-api"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.111.0",
+  "uvicorn[standard]>=0.30.0",
+  "yt-dlp>=2024.08.06",
+  "minio>=7.2.12",
+  "pydantic>=2.7.0",
+  "python-multipart>=0.0.9",
+  "aiofiles>=23.2.1",
+  "httpx>=0.27.0",
+  "tenacity>=8.2.3",
+  "faster-whisper>=1.0.0"
+]
+[tool.uvicorn]
+reload = true
+```
+
+> **Nota:** Garanta `ffmpeg` instalado no container.
+
+---
+
+## ☁️ Integração com MinIO
+
+* Criar bucket `MINIO_BUCKET` se não existir.
+* Upload com `put_object` e `content_type` correto (ex.: `video/mp4`, `application/json`, `text/vtt`, `application/x-subrip`).
+* Gerar URLs pré-assinadas (`presigned_get_object`) com expiração configurável (padrão 24h).
+* Armazenar com chaves padronizadas: `videos/{id}/{basename}.{ext}`, `transcriptions/{id}/{basename}.json|srt|vtt`.
+
+---
+
+## 🧠 Transcrição (faster-whisper)
+
+* Carregar modelo definido em `WHISPER_MODEL` e `WHISPER_COMPUTE_TYPE`.
+* Permitir idioma (`language`) opcional no payload. Default de `.env`.
+* Retornar **texto completo** e timestamps por segmento. Persistir **JSON (rico)** + **SRT** + **VTT** no MinIO.
+
+---
+
+## 🔀 Fluxos Principais
+
+1. **Download**:
+
+   * Entrada: `url` (obrigatória), `format` (ex.: `mp4`), `audio_only` (bool), `quality` (ex.: `best`), `extract_audio` (bool).
+   * Saída: `video_id`, metadados (título, duração), chaves no MinIO e **URL pré-assinada**.
+
+2. **Transcrever**:
+
+   * Entrada: `video_id` **ou** `url` (se não baixado ainda). Se `url`, efetuar download temporário, transcrever e descartar se não for persistir vídeo.
+   * Saída: `transcription_id` (pode ser o `video_id`), URLs pré-assinadas para JSON/SRT/VTT.
+
+3. **Status**:
+
+   * Retornar status de tarefas disparadas com `BackgroundTasks` (download/transcrição), com progresso básico.
+
+---
+
+## 🔗 Endpoints REST (especificação)
+
+* `GET /health` → status da API e do MinIO.
+* `POST /downloads` → inicia download. **Body**:
+
+```json
+{
+  "url": "https://...",
+  "format": "mp4",
+  "quality": "best",
+  "audio_only": false,
+  "extract_audio": false
+}
+```
+
+**Resposta 201**:
+
+```json
+{
+  "video_id": "abc123",
+  "title": "...",
+  "duration": 123.4,
+  "bucket": "media",
+  "object_key": "videos/abc123/file.mp4",
+  "presigned_url": "https://..."
+}
+```
+
+* `GET /downloads/{video_id}` → obtém metadados e URL pré-assinada.
+* `POST /transcriptions` → cria transcrição. **Body**:
+
+```json
+{
+  "video_id": "abc123",
+  "language": "pt",
+  "model": "medium"
+}
+```
+
+**Resposta 201**:
+
+```json
+{
+  "transcription_id": "abc123",
+  "json_url": "https://...",
+  "srt_url": "https://...",
+  "vtt_url": "https://...",
+  "language": "pt"
+}
+```
+
+* `GET /transcriptions/{transcription_id}` → detalhes + URLs pré-assinadas.
+* `GET /status/{task_id}` → status da tarefa (download/transcrição) se assíncrona.
+
+> **Auth**: todas as rotas (exceto `/health`) exigem header `X-API-Key` com a chave definida no `.env`.
+
+---
+
+## 🧩 Requisitos de Implementação
+
+* **Detecção de plataforma automática** via `yt-dlp` (não exigir `platform` no payload).
+* **Sanitização de filename** e limpeza de temporários em caso de erro.
+* **Erros estruturados** (HTTPException com `code`, `message`, `details`).
+* **Logging**: JSON, incluir `request_id`, `path`, `elapsed_ms` e `status_code` em middleware.
+* **CORS**: permitir origem configurável (ex.: `*` por padrão, mas variável de ambiente para restringir).
+* **Retries** (ex.: rede/MinIO) com `tenacity` onde fizer sentido.
+* **Validação**: Pydantic com exemplos no schema.
+* **OpenAPI**: descrições claras e exemplos em cada rota; incluir `/docs` e `/redoc`.
+
+---
+
+## 🧪 Testes (pytest)
+
+* **Health**: 200 + checagem de acesso ao bucket.
+* **Download Flow**: POST `/downloads` → 201 → GET por `video_id` → 200. Mock de MinIO e yt-dlp em testes.
+* **Transcription Flow**: POST `/transcriptions` (com `video_id` preparado) → 201, e validação de URLs.
+
+---
+
+## 🐳 Docker & Compose
+
+**Dockerfile** (requisito):
+
+* Base `python:3.11-slim`.
+* Instalar `ffmpeg` e dependências do `faster-whisper` (ex.: `ffmpeg`, `build-essential`, `git`).
+* Copiar projeto, instalar deps (usar `uv`/`pip`), criar usuário não-root.
+* CMD: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+
+**docker-compose.yml** (requisito):
+
+* Serviço `api` + serviço `minio` + `minio-console`.
+* Volumes persistentes para MinIO e `/app/data`.
+* Rede compartilhada; healthchecks.
+
+---
+
+## ✅ Critérios de Aceite
+
+* Subir com `docker compose up` e `/health` retornar OK.
+* `POST /downloads` baixar e disponibilizar URL pré-assinada no MinIO.
+* `POST /transcriptions` gerar JSON/SRT/VTT e disponibilizar URLs.
+* Documentação de uso no `README.md` (passo a passo, exemplos curl e `HTTPie`).
+
+---
+
+## ✍️ Entregáveis
+
+1. Código completo (estrutura acima) com **docstrings** e comentários.
+2. `Dockerfile`, `docker-compose.yml`, `.env.example` e `README.md`.
+3. Testes `pytest` cobrindo fluxos principais.
+
+---
+
+## 🧭 Passo a Passo que você (Trae) deve seguir
+
+1. **Gerar projeto** com a estrutura descrita e arquivos completos.
+2. **Implementar** `config`, `security` (API Key), `storage` (MinIO), `downloader` (yt-dlp), `transcription` (faster-whisper), rotas, modelos Pydantic e middleware de logging/correlação.
+3. **Criar** `Dockerfile` e `docker-compose.yml` com serviços `api`, `minio`, `minio-console`.
+4. **Adicionar** testes `pytest`.
+5. **Gerar** `README.md` com instruções:
+
+   * `cp .env.example .env`
+   * `docker compose up -d`
+   * Exemplos `curl`/`httpie` para cada rota.
+6. **Validar** localmente (simulação), garantindo que os exemplos do README funcionem.
+
+---
+
+## 🔧 Exemplos de uso (para README)
+
+**Download:**
+
+```bash
+http POST :8000/downloads \
+  X-API-Key:supersecreta \
+  url=https://www.youtube.com/watch?v=dQw4w9WgXcQ \
+  format=mp4 quality=best audio_only:=false extract_audio:=false
+```
+
+**Transcrição:**
+
+```bash
+http POST :8000/transcriptions \
+  X-API-Key:supersecreta \
+  video_id=abc123 language=pt model=medium
+```
+
+**Obter URLs:**
+
+```bash
+http GET :8000/downloads/abc123 X-API-Key:supersecreta
+http GET :8000/transcriptions/abc123 X-API-Key:supersecreta
+```
+
+---
+
+## 🧱 Padrões de Código (resumo)
+
+* Funções curtas, puras quando possível.
+* Tipagem rígida (`from __future__ import annotations`).
+* Separação clara entre **camada de API** (FastAPI/DTOs) e **serviços** (downloader/transcription/storage).
+* Mensagens de erro em português claro, porém chaves/fields em inglês para consistência de API.
+
+---
+
+## 🎁 Bônus (se couber)
+
+* Suporte a **legendas nativas** via `yt-dlp` quando disponíveis.
+* Suporte a **download de playlists** (enfileirando itens).
+* **Limite de taxa** (rate limit) simples por IP/chave.
+* **ETags** e cache-control para recursos estáticos via proxy (fora do escopo do FastAPI em si).
+
+---
+
+> **Saída esperada deste prompt**: um pacote de código completo, com todos os arquivos e conteúdo integral, pronto para `docker compose up` e uso imediato das rotas descritas acima.
