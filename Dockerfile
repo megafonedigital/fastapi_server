@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar o código da aplicação
 COPY app/ ./app/
 
-# Copy .env file if it exists
-COPY .env* /app/ || true
+# Ensure app directory exists
+RUN mkdir -p /app/app
 
 # Criar diretório de trabalho temporário
 RUN mkdir -p /tmp/workdir && chmod 777 /tmp/workdir

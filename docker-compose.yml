@@ -10,6 +10,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./.env:/app/.env
+      - ./app/.env:/app/app/.env
       - workdir:/tmp/workdir
     environment:
       - API_TITLE=FastAPI Video Downloader and Transcription API
