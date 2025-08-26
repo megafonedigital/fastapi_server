@@ -17,6 +17,7 @@ python-json-logger==2.0.7
 
 # Armazenamento
 minio==7.1.17
+tenacity==8.2.3
 
 # Download de vídeos
 yt-dlp==2023.10.13
