@@ -22,6 +22,10 @@ services:
       - MINIO_BUCKET=${MINIO_BUCKET:-media-bucket}
       - MINIO_SECURE=false
       - URL_EXPIRY_HOURS=24
+      # Configurações para resolver problemas com ctranslate2
+      - PYTHONMALLOC=malloc
+      - CT2_USE_EXPERIMENTAL_PACKED_GEMM=1
+      - CT2_VERBOSE=1
       - WORKDIR=/tmp/workdir
       - WHISPER_MODEL=base
       - WHISPER_LANGUAGE=pt

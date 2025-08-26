@@ -49,15 +49,30 @@ class AudioTranscriber:
         model_name = model_name or self.model_name
         compute_type = compute_type or self.compute_type
         
-        # Check if model is already loaded with the same parameters
-        if self.model is not None and self.model_name == model_name and self.compute_type == compute_type:
-            return
-        
-        # Load model
-        logger.info(f"Loading Whisper model: {model_name} with compute type: {compute_type}")
-        self.model = WhisperModel(model_name, device="auto", compute_type=compute_type)
-        self.model_name = model_name
-        self.compute_type = compute_type
+        try:
+            logger.info(f"Loading Whisper model: {model_name} with compute type: {compute_type}")
+            # Configurar opções para evitar problemas com a pilha executável
+            os.environ["PYTHONMALLOC"] = "malloc"
+            os.environ["CT2_USE_EXPERIMENTAL_PACKED_GEMM"] = "1"
+            os.environ["CT2_VERBOSE"] = "1"
+            
+            # Check if model is already loaded with the same parameters
+            if self.model is not None and self.model_name == model_name and self.compute_type == compute_type:
+                return
+            
+            # Load model
+            logger.info(f"Loading Whisper model: {model_name} with compute type: {compute_type}")
+            self.model = WhisperModel(model_name, device="auto", compute_type=compute_type)
+            self.model_name = model_name
+            self.compute_type = compute_type
+            logger.info(f"Successfully loaded Whisper model: {model_name}")
+            
+        except ImportError as e:
+            logger.error(f"Failed to import required modules: {str(e)}")
+            raise TranscriptionError(f"Failed to load transcription model: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to load Whisper model: {str(e)}")
+            raise TranscriptionError(f"Failed to load transcription model: {str(e)}")
     
     def _extract_audio(self, media_file: Path, output_file: Optional[Path] = None) -> Path:
         """
