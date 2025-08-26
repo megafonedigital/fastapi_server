@@ -9,6 +9,7 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app
+      - ./.env:/app/.env
       - workdir:/tmp/workdir
     environment:
       - API_TITLE=FastAPI Video Downloader and Transcription API
@@ -17,7 +18,7 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=media-bucket
+      - MINIO_BUCKET=${MINIO_BUCKET:-media-bucket}
       - MINIO_SECURE=false
       - URL_EXPIRY_HOURS=24
       - WORKDIR=/tmp/workdir
@@ -51,12 +52,14 @@ services:
     image: minio/mc
     depends_on:
       - minio
+    environment:
+      - MINIO_BUCKET=${MINIO_BUCKET:-media-bucket}
     entrypoint: >
       /bin/sh -c '
       sleep 5;
       /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb myminio/media-bucket --ignore-existing;
-      /usr/bin/mc policy set public myminio/media-bucket;
+      /usr/bin/mc mb myminio/${MINIO_BUCKET} --ignore-existing;
+      /usr/bin/mc policy set public myminio/${MINIO_BUCKET};
       exit 0;
       '
 

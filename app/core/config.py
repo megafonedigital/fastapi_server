@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # URL expiration time in seconds (default: 24 hours)
     URL_EXPIRATION: int = 86400
     
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=[".env", "app/.env"], env_file_encoding="utf-8", extra="ignore")
 
 # Create settings instance
 settings = Settings()

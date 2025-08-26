@@ -29,21 +29,30 @@ class MinioStorage:
         )
         self.bucket = settings.MINIO_BUCKET
         
+        logger.info(f"Initializing MinIO storage with bucket: {self.bucket}")
+        
         # Ensure bucket exists
         self._ensure_bucket_exists()
     
-    def _ensure_bucket_exists(self) -> None:
+    def _ensure_bucket_exists(self):
         """
-        Create bucket if it doesn't exist
+        Check if the bucket exists, create it if it doesn't
         """
         try:
+            logger.info(f"Checking if bucket exists: {self.bucket}")
+            logger.info(f"MinIO endpoint: {settings.MINIO_ENDPOINT}")
+            logger.info(f"MinIO access key: {settings.MINIO_ACCESS_KEY[:3]}...")
+            
             if not self.client.bucket_exists(self.bucket):
+                logger.info(f"Bucket does not exist, creating: {self.bucket}")
                 self.client.make_bucket(self.bucket)
                 logger.info(f"Created bucket: {self.bucket}")
             else:
                 logger.info(f"Bucket already exists: {self.bucket}")
         except S3Error as e:
             logger.error(f"Error ensuring bucket exists: {str(e)}")
+            logger.error(f"Bucket name: {self.bucket}")
+            logger.error(f"MinIO endpoint: {settings.MINIO_ENDPOINT}")
             raise
     
     @retry(
