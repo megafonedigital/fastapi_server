@@ -6,9 +6,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
-    build-essential \
-    cmake \
-    patchelf \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -18,14 +15,8 @@ COPY requirements.txt .
 # Instalar dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Corrigir permissões para ctranslate2
-RUN find /usr/local/lib/python3.11/site-packages/ctranslate2 -name "*.so*" -exec patchelf --remove-needed libc.so.6 {} \; || true
-RUN find /usr/local/lib/python3.11/site-packages/ctranslate2 -name "*.so*" -exec patchelf --set-rpath '$ORIGIN' {} \; || true
-
-# Desativar verificação de segurança da pilha executável
-ENV PYTHONMALLOC=malloc
-ENV CT2_USE_EXPERIMENTAL_PACKED_GEMM=1
-ENV CT2_VERBOSE=1
+# Configuração do ambiente
+# Nenhuma configuração especial necessária para o Whisper da OpenAI
 
 # Copiar o código da aplicação
 COPY app/ ./app/

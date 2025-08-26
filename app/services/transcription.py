@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, Tuple, List, Union
 from uuid import uuid4
 
 import ffmpeg
-from faster_whisper import WhisperModel
+import whisper
 
 from app.core.config import settings
 from app.core.storage import storage
@@ -35,36 +35,28 @@ class AudioTranscriber:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.model = None
         self.model_name = settings.WHISPER_MODEL
-        self.compute_type = settings.WHISPER_COMPUTE_TYPE
     
-    def _load_model(self, model_name: Optional[str] = None, compute_type: Optional[str] = None) -> None:
+    def _load_model(self, model_name: Optional[str] = None) -> None:
         """
         Load the Whisper model
         
         Args:
             model_name: Name of the model to load
-            compute_type: Compute type for the model
         """
         # Use provided values or defaults from settings
         model_name = model_name or self.model_name
-        compute_type = compute_type or self.compute_type
         
         try:
-            logger.info(f"Loading Whisper model: {model_name} with compute type: {compute_type}")
-            # Configurar opções para evitar problemas com a pilha executável
-            os.environ["PYTHONMALLOC"] = "malloc"
-            os.environ["CT2_USE_EXPERIMENTAL_PACKED_GEMM"] = "1"
-            os.environ["CT2_VERBOSE"] = "1"
+            logger.info(f"Loading Whisper model: {model_name}")
             
             # Check if model is already loaded with the same parameters
-            if self.model is not None and self.model_name == model_name and self.compute_type == compute_type:
+            if self.model is not None and self.model_name == model_name:
                 return
             
             # Load model
-            logger.info(f"Loading Whisper model: {model_name} with compute type: {compute_type}")
-            self.model = WhisperModel(model_name, device="auto", compute_type=compute_type)
+            logger.info(f"Loading Whisper model: {model_name}")
+            self.model = whisper.load_model(model_name)
             self.model_name = model_name
-            self.compute_type = compute_type
             logger.info(f"Successfully loaded Whisper model: {model_name}")
             
         except ImportError as e:
@@ -170,23 +162,22 @@ class AudioTranscriber:
             
             # Transcribe audio
             logger.info(f"Transcribing audio: {audio_file} (language: {language})")
-            segments, info = self.model.transcribe(
-                str(audio_file),
-                language=language,
-                task="transcribe",
-                beam_size=5,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 500},
-            )
+            
+            # Configurar opções de transcrição
+            transcribe_options = {}
+            if language:
+                transcribe_options["language"] = language
+            
+            # Realizar a transcrição com o modelo Whisper da OpenAI
+            result_dict = self.model.transcribe(str(audio_file), **transcribe_options)
             
             # Process segments
             transcription_segments = []
-            full_text = ""
             
-            for i, segment in enumerate(segments):
+            for i, segment in enumerate(result_dict["segments"]):
                 # Update task progress
                 if task_id:
-                    progress = 0.4 + (0.5 * (i / (len(list(segments)) or 1)))
+                    progress = 0.4 + (0.5 * (i / (len(result_dict["segments"]) or 1)))
                     TaskManager.update_task(
                         task_id,
                         progress=min(0.9, progress),
@@ -196,20 +187,17 @@ class AudioTranscriber:
                 transcription_segments.append(
                     TranscriptionSegment(
                         id=i,
-                        start=segment.start,
-                        end=segment.end,
-                        text=segment.text.strip(),
+                        start=segment["start"],
+                        end=segment["end"],
+                        text=segment["text"].strip(),
                     )
                 )
-                
-                # Add to full text
-                full_text += segment.text + " "
             
             # Create transcription result
             result = TranscriptionResult(
-                text=full_text.strip(),
+                text=result_dict["text"].strip(),
                 segments=transcription_segments,
-                language=info.language,
+                language=result_dict.get("language", language or "")
             )
             
             logger.info(f"Transcription completed: {len(transcription_segments)} segments")

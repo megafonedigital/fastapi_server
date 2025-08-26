@@ -20,8 +20,7 @@ class Settings(BaseSettings):
     WORKDIR: str = "/app/data"
     
     # Whisper settings
-    WHISPER_MODEL: str = "medium"
-    WHISPER_COMPUTE_TYPE: str = "auto"  # auto / float16 / int8
+    WHISPER_MODEL: str = "medium"  # tiny, base, small, medium, large
     WHISPER_LANGUAGE: str = "pt"
     
     # URL expiration time in seconds (default: 24 hours)

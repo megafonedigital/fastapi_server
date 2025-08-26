@@ -25,7 +25,7 @@ requests==2.31.0
 
 # Processamento de áudio/vídeo
 ffmpeg-python==0.2.0
-faster-whisper==0.9.0
+openai-whisper==20231117
 numpy==1.26.1
 torch==2.1.0
 torchaudio==2.1.0
